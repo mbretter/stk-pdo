@@ -51,13 +51,17 @@ class Connector implements Injectable
      *
      * @param PDO $pdo
      * @param string $table
+     * @param string|null $pkScheme
      * @param array $pkMappings
      */
-    public function __construct(PDO $pdo, string $table, array $pkMappings = [])
+    public function __construct(PDO $pdo, string $table, string $pkScheme = null, array $pkMappings = [])
     {
         $this->_pdo        = $pdo;
         $this->_table      = $table;
         $this->_pkMappings = $pkMappings;
+        if (strlen($pkScheme)) {
+            $this->_pkScheme = $pkScheme;
+        }
     }
 
     public function setPkMappings(array $mappings)
