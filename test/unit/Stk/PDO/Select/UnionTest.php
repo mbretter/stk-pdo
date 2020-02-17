@@ -41,7 +41,7 @@ class UnionTest extends Base
     {
         $select2 = $this->select->from()->from('groups');
         $union = $this->select->union($select2);
-        $this->assertEquals('SELECT COUNT(*) FROM (SELECT a.* FROM `users` a) AS u', $union->count());
+        $this->assertEquals('SELECT COUNT(*) FROM (SELECT a.* FROM `users` a) AS u', $union->count()->toSql());
     }
 
 }

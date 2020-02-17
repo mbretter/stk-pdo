@@ -5,13 +5,14 @@ namespace StkTest\PDO;
 use DateTime;
 use PDOStatement;
 use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Stk\Immutable\Record;
 use PDO;
 use Stk;
+use StkTest\Base;
 
-class ConntectorTest extends TestCase
+class ConntectorTest extends Base
 {
     /** @var PDO|MockObject */
     protected $pdo;
@@ -25,7 +26,7 @@ class ConntectorTest extends TestCase
     protected function setUp(): void
     {
         $this->pdo = $this->createMock(PDO::class);
-        $this->pdo->method('quote')->willReturnCallback(function($a)  {
+        $this->pdo->method('quote')->willReturnCallback(function ($a) {
             return addslashes($a);
         });
 
@@ -88,6 +89,20 @@ class ConntectorTest extends TestCase
         $this->statement->method('execute')->with(array_values($data))->willReturn(true);
         $this->statement->method('rowCount')->willReturn(1);
         $this->assertEquals(1, $this->connector->update($row));
+    }
+
+    public function testUpdateWithFailure()
+    {
+        $data = [
+            'foo'      => 'bar',
+            'users_id' => 1234
+        ];
+        $row  = new Record($data);
+
+        $this->pdo->method('prepare')->with('UPDATE `users` SET `foo` = ? WHERE `users_id` = ?')
+            ->willReturn($this->statement);
+        $this->statement->method('execute')->willReturn(false);
+        $this->assertFalse($this->connector->update($row));
     }
 
     public function testUpdateWithKeyFields()
@@ -154,6 +169,75 @@ class ConntectorTest extends TestCase
         $this->connector->update($row);
     }
 
+    // save
+
+    public function testSaveUpdate()
+    {
+        $data = [
+            'foo'      => 'bar',
+            'users_id' => 1234
+        ];
+        $row  = new Record($data);
+
+        $this->pdo->method('prepare')->with('UPDATE `users` SET `foo` = ? WHERE `users_id` = ?')
+            ->willReturn($this->statement);
+
+        $this->statement->method('execute')->with(array_values($data))->willReturn(true);
+        $this->statement->method('rowCount')->willReturn(1);
+
+        $this->assertSame($row, $this->connector->save($row));
+    }
+
+    public function testSaveInsertWithKeyfield()
+    {
+        $data = [
+            'foo'      => 'bar',
+            'users_id' => 0
+        ];
+        $row  = new Record($data);
+
+        $this->pdo->method('prepare')->with('INSERT INTO `users` (`foo`,`users_id`) VALUES (?,?)')
+            ->willReturn($this->statement);
+
+        $this->statement->method('execute')->with(array_values($data))->willReturn(true);
+        $this->statement->method('rowCount')->willReturn(1);
+
+        $this->assertSame($row, $this->connector->save($row));
+    }
+
+    public function testSaveInsertWithoutKeyfield()
+    {
+        $data = [
+            'foo' => 'bar'
+        ];
+        $row  = new Record($data);
+
+        $this->pdo->method('prepare')->with('INSERT INTO `users` (`foo`) VALUES (?)')
+            ->willReturn($this->statement);
+
+        $this->statement->method('execute')->with(array_values($data))->willReturn(true);
+        $this->statement->method('rowCount')->willReturn(1);
+
+        $this->assertSame($row, $this->connector->save($row));
+    }
+
+    public function testSaveInsertWithNullKeyfield()
+    {
+        $data = [
+            'foo'      => 'bar',
+            'users_id' => null
+        ];
+        $row  = new Record($data);
+
+        $this->pdo->method('prepare')->with('INSERT INTO `users` (`foo`,`users_id`) VALUES (?,?)')
+            ->willReturn($this->statement);
+
+        $this->statement->method('execute')->with(array_values($data))->willReturn(true);
+        $this->statement->method('rowCount')->willReturn(1);
+
+        $this->assertSame($row, $this->connector->save($row));
+    }
+
     // delete
 
     public function testDelete()
@@ -194,7 +278,7 @@ class ConntectorTest extends TestCase
 
     public function testQuery()
     {
-        $select = $this->connector->select('SELECT * FROM bla');
+        $select = new Stk\PDO\Select($this->quoteFunc(), 'users');
         $this->pdo->method('query')->willReturn($this->statement);
 
         $this->assertSame($this->statement, $this->connector->query($select));
@@ -227,6 +311,21 @@ class ConntectorTest extends TestCase
         $this->assertEquals($data, $row);
     }
 
+    public function testFetchColumn()
+    {
+        $select = new Stk\PDO\Select($this->quoteFunc(), 'users');
+        $this->pdo->method('query')->willReturn($this->statement);
+        $this->statement->method('fetchColumn')->with(0)->willReturn('foo');
+        $this->assertEquals('foo', $this->connector->fetchColumn($select));
+    }
+
+    public function testFetchColumnWithError()
+    {
+        $select = new Stk\PDO\Select($this->quoteFunc(), 'users');
+        $this->pdo->method('query')->willReturn(false);
+        $this->assertFalse($this->connector->fetchColumn($select));
+    }
+
     public function testFetchEnded()
     {
         $this->statement->method('fetch')->willReturn(false);
@@ -241,13 +340,76 @@ class ConntectorTest extends TestCase
             'id'  => 1234
         ];
 
-        $select = $this->connector->select()->where('id = ?', 1234);
+        $select = new Stk\PDO\Select($this->quoteFunc(), 'users');
+        $select = $select->where('id = ?', 1234);
         $this->pdo->method('query')->willReturn($this->statement)->with('SELECT a.* FROM `users` a WHERE id = 1234');
         $this->statement->method('fetch')->willReturn($data);
 
         $row = $this->connector->findOne($select);
         $this->assertInstanceOf(Record::class, $row);
         $this->assertEquals($data, $row->get());
+    }
+
+    public function testFindOneWithError()
+    {
+        $select = new Stk\PDO\Select($this->quoteFunc(), 'users');
+        $select = $select->where('id = ?', 1234);
+
+        $this->pdo->method('query')->willReturn(false);
+
+        $row = $this->connector->findOne($select);
+        $this->assertFalse($row);
+    }
+
+    public function testFindById()
+    {
+        $data = [
+            'foo'      => 'bar',
+            'users_id' => 1234
+        ];
+
+        $this->pdo->method('prepare')->with('SELECT * FROM `users` WHERE `users_id` = ?')->willReturn($this->statement);
+        $this->statement->method('fetch')->willReturn($data);
+
+        $row = $this->connector->findById(1234);
+        $this->assertInstanceOf(Record::class, $row);
+        $this->assertEquals($data, $row->get());
+    }
+
+    public function testFindByIdWithError1()
+    {
+        $this->pdo->method('prepare')->willReturn(false);
+
+        $row = $this->connector->findById(1234);
+        $this->assertFalse($row);
+    }
+
+    public function testFindByIdWithError2()
+    {
+        $this->pdo->method('prepare')->with('SELECT * FROM `users` WHERE `users_id` = ?')->willReturn($this->statement);
+        $this->statement->method('execute')->willReturn(false);
+
+        $row = $this->connector->findById(1234);
+        $this->assertFalse($row);
+    }
+
+    // execute
+
+    public function testExecute()
+    {
+        $sql = 'DELETE FROM `users` WHERE `users_id` = ?';
+        $this->pdo->method('prepare')->with($sql)->willReturn($this->statement);
+        $this->statement->method('execute')->with([1234])->willReturn(true);
+        $this->statement->method('rowCount')->willReturn(1);
+        $this->assertEquals(1, $this->connector->execute($sql, [1234]));
+    }
+
+    // last insert id
+
+    public function testGetLastInsertId()
+    {
+        $this->pdo->method('lastInsertId')->willReturn(1234);
+        $this->assertEquals(1234, $this->connector->getLastInsertId());
     }
 
     // dumb tests
@@ -262,6 +424,15 @@ class ConntectorTest extends TestCase
     {
         $this->connector->setTable('groups');
         $this->assertSame('groups', $this->connector->getTable());
+    }
+
+    public function testDebug()
+    {
+        $logger = $this->createMock(LoggerInterface::class);
+        $this->connector->setLogger($logger);
+        $logger->expects($this->once())->method('debug');
+        $select = new Stk\PDO\Select($this->quoteFunc(), 'users');
+        $this->connector->query($select);
     }
 
 }

@@ -16,4 +16,9 @@ class Base extends TestCase
             return sprintf("'%s'", addslashes($v));
         };
     }
+
+    public function testX()
+    {
+        $this->assertTrue(true);
+    }
 }

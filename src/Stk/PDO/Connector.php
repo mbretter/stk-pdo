@@ -3,7 +3,6 @@
 namespace Stk\PDO;
 
 use DateTime;
-use IteratorIterator;
 use PDO;
 use PDOStatement;
 use Psr\Log\LoggerAwareTrait;
@@ -136,7 +135,11 @@ class Connector implements Injectable
 
         $doInsert = false;
         foreach ($keyFields as $f) {
-            if (!$row->has($f)) {
+            // check for null and integer 0, and not with has()
+            // some special checks would be needed for certain vendors:
+            // oracle: Sequence.nextval
+            // sql server: NEXT VALUE FOR Schema.Sequence
+            if ($row->get($f) === null || $row->get($f) === 0) {
                 $doInsert = true;
                 break;
             }
@@ -169,16 +172,7 @@ class Connector implements Injectable
 
         $sql = sprintf('INSERT INTO `%s` (%s) VALUES (%s)', $this->_table, implode(',', $fields), $params);
 
-        $stmt = $this->_pdo->prepare($sql);
-        if ($stmt === false) {
-            return false;
-        }
-
-        if ($stmt->execute(array_values($fieldValues)) === false) {
-            return false;
-        }
-
-        return $stmt->rowCount();
+        return $this->prepareExecute($sql, array_values($fieldValues));
     }
 
     /**
@@ -213,16 +207,7 @@ class Connector implements Injectable
 
         $sql = sprintf('UPDATE `%s` SET %s WHERE %s', $this->_table, implode(',', $set), implode(' AND ', $where));
 
-        $stmt = $this->_pdo->prepare($sql);
-        if ($stmt === false) {
-            return false;
-        }
-
-        if ($stmt->execute(array_merge($values, $whereValues)) === false) {
-            return false;
-        }
-
-        return $stmt->rowCount();
+        return $this->prepareExecute($sql, array_merge($values, $whereValues));
     }
 
     /**
@@ -245,16 +230,7 @@ class Connector implements Injectable
 
         $sql = sprintf('DELETE FROM `%s` WHERE %s', $this->_table, implode(' AND ', $where));
 
-        $stmt = $this->_pdo->prepare($sql);
-        if ($stmt === false) {
-            return false;
-        }
-
-        if ($stmt->execute($whereValues) === false) {
-            return false;
-        }
-
-        return $stmt->rowCount();
+        return $this->prepareExecute($sql, $whereValues);
     }
 
     /**
@@ -271,58 +247,42 @@ class Connector implements Injectable
 
         if (!strlen($keyField)) {
             $keyFields = $this->derivePrivateKey();
-            if (count($keyFields) > 1) {
-                throw new RuntimeException('deleteById does not support split keys!');
-            }
-
-            $keyField = $keyFields[0];
+            $keyField  = $keyFields[0];
         }
 
         $where = sprintf('`%s` = ?', $keyField);
 
         $sql = sprintf('DELETE FROM `%s` WHERE %s', $this->_table, $where);
 
-        $stmt = $this->_pdo->prepare($sql);
-        if ($stmt === false) {
-            return false;
-        }
-
-        if ($stmt->execute([$id]) === false) {
-            return false;
-        }
-
-        return $stmt->rowCount();
+        return $this->prepareExecute($sql, [$id]);
     }
 
     /**
      * execute an SQL statement and return affected rows
      *
      * @param $sql
-     * @param array $values
+     * @param array $params
      *
      * @return int
      */
-    public function exec($sql, $values = [])
+    public function execute($sql, $params = [])
     {
         $this->debug(__METHOD__ . ':' . $sql);
 
-        $stmt = $this->_pdo->prepare($sql);
-
-        $stmt->execute($values);
-
-        return $stmt->rowCount();
+        return $this->prepareExecute($sql, $params);
     }
 
     /**
-     * @param Select $select
+     * @param SqlInterface $select
      *
      * @return false|PDOStatement
      */
-    public function query(Select $select)
+    public function query(SqlInterface $select)
     {
-        $this->debug(__METHOD__ . ':' . $select);
+        $sql = $select->toSQL();
+        $this->debug(__METHOD__ . ':' . $sql);
 
-        return $this->_pdo->query($select);
+        return $this->_pdo->query($sql);
     }
 
     /**
@@ -349,11 +309,11 @@ class Connector implements Injectable
     /**
      * return a single row
      *
-     * @param Select $select
+     * @param SqlInterface $select
      *
      * @return array|bool|ImmutableInterface|null
      */
-    public function findOne(Select $select)
+    public function findOne(SqlInterface $select)
     {
         $stmt = $this->query($select);
         if ($stmt === false) {
@@ -365,6 +325,7 @@ class Connector implements Injectable
 
     /**
      * find a single row by id, no split keys supported
+     *
      * @param $id
      * @param string $keyField
      *
@@ -376,11 +337,7 @@ class Connector implements Injectable
 
         if (!strlen($keyField)) {
             $keyFields = $this->derivePrivateKey();
-            if (count($keyFields) > 1) {
-                throw new RuntimeException('findById does not support split keys!');
-            }
-
-            $keyField = $keyFields[0];
+            $keyField  = $keyFields[0];
         }
 
         $where = sprintf('`%s` = ?', $keyField);
@@ -389,6 +346,10 @@ class Connector implements Injectable
 
         $stmt = $this->_pdo->prepare($sql);
         if ($stmt === false) {
+            return false;
+        }
+
+        if ($stmt->execute([$id]) === false) {
             return false;
         }
 
@@ -404,6 +365,21 @@ class Connector implements Injectable
     {
         return $this->_pdo->lastInsertId($sequence);
     }
+
+    public function fetchColumn(SqlInterface $select, $col = 0)
+    {
+        $sql = $select->toSQL();
+        $this->debug(__METHOD__ . ":$sql");
+
+        $stmt = $this->_pdo->query($sql);
+        if ($stmt === false) {
+            return false;
+        }
+
+        return $stmt->fetchColumn($col);
+    }
+
+    // helpers
 
     /**
      * derive private key, if no keyfields are given
@@ -430,6 +406,29 @@ class Connector implements Injectable
     }
 
     /**
+     * prepare and execute an SQL statement
+     * return number of affected rows
+     *
+     * @param string $sql
+     * @param array $params
+     *
+     * @return bool|int
+     */
+    protected function prepareExecute(string $sql, array $params = [])
+    {
+        $stmt = $this->_pdo->prepare($sql);
+        if ($stmt === false) {
+            return false;
+        }
+
+        if ($stmt->execute($params) === false) {
+            return false;
+        }
+
+        return $stmt->rowCount();
+    }
+
+    /**
      * build an array of values, useable as parameters for insert and updates
      * convert Datetime mysql datetime-format
      * only leaf nodes of the immutable are used, the corresponding path is converted into a dotted string
@@ -438,7 +437,7 @@ class Connector implements Injectable
      *
      * @return array
      */
-    public function buildValueSet(ImmutableInterface $row)
+    protected function buildValueSet(ImmutableInterface $row)
     {
         $values = [];
         $row->walk(function ($path, $value) use (&$values) {
@@ -452,41 +451,6 @@ class Connector implements Injectable
         });
 
         return $values;
-    }
-
-    public function select()
-    {
-        return new Select(function ($v) { return $this->_pdo->quote($v); }, $this->_table);
-    }
-
-    public function count(Select $select, $field = null)
-    {
-        $this->debug(__METHOD__ . ":" . $select->count($field));
-
-        return $this->_pdo->query($select->count($field))->fetchColumn();
-    }
-
-    /**
-     * returns a sequence number
-     *
-     * @param null $name the name of the sequence, defaults to the current selected collection name
-     * @param string $seqCollection the collection holding the sequence values
-     *
-     * @return mixed
-     */
-    public function getNextSeq($name = null, $seqCollection = 'sequence')
-    {
-        if ($name === null) {
-            $name = $this->_table->getCollectionName();
-        }
-
-        $coll = $this->_pdo->selectCollection($seqCollection);
-        $ret  = $coll->findOneAndUpdate(['_id' => $name], ['$inc' => ['seq' => 1]], [
-            'upsert'         => true,
-            'returnDocument' => FindOneAndUpdate::RETURN_DOCUMENT_AFTER
-        ]);
-
-        return $ret->seq;
     }
 
     /**

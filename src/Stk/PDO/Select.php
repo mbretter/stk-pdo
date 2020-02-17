@@ -4,7 +4,7 @@ namespace Stk\PDO;
 
 use Closure;
 
-class Select
+class Select implements SqlInterface
 {
     protected $_from = [];
     protected $_columns = [];
@@ -15,6 +15,7 @@ class Select
     protected $_group = [];
     protected $_having = []; // XXX ToDo
     protected $_distinct = false;
+    protected $_count = false;
     protected $_union = [];
 
     /**
@@ -41,19 +42,36 @@ class Select
         return $me;
     }
 
-    public function from($t = null, $f = null)
+    public function count($field = null)
+    {
+        $me         = clone($this);
+        $me->_count = $field === null ? true : $field;
+
+        return $me;
+    }
+
+    /**
+     * add from clause
+     *
+     *
+     * @param null $table
+     * @param array|null $fields
+     *
+     * @return Select
+     */
+    public function from($table = null, array $fields = null)
     {
         $me = clone($this);
-        if ($t === null) {
+        if ($table === null) {
             $me->_from = [];
 
             return $me;
         }
-        if ($f === null) {
-            $f = ['*'];
+        if ($fields === null) {
+            $fields = ['*'];
         }
 
-        $me->_from[] = [$t, $f];
+        $me->_from[] = [$table, $fields];
 
         return $me;
     }
@@ -200,17 +218,7 @@ class Select
         return $this->_join('RIGHT JOIN', $t, $on, $f);
     }
 
-    public function __toString()
-    {
-        return $this->toSql();
-    }
-
-    public function count($field = null)
-    {
-        return $this->toSql($field === null ? true : $field);
-    }
-
-    public function toSql($count = false)
+    public function toSql(): string
     {
         $fields = '';
         $from   = '';
@@ -286,9 +294,9 @@ class Select
             }
         }
 
-        if ($count) {
+        if ($this->_count) {
             if ($this->_distinct) {
-                $cfields = sprintf('COUNT(DISTINCT %s)', $count);
+                $cfields = sprintf('COUNT(DISTINCT %s)', $this->_count);
             } else {
                 $cfields = 'COUNT(*)';
             }
@@ -311,14 +319,14 @@ class Select
         if (strlen($group)) {
             $q .= sprintf(' GROUP BY %s', $group);
         }
-        if (strlen($order) && !$count) {
+        if (strlen($order) && !$this->_count) {
             $q .= sprintf(' ORDER BY %s', $order);
         }
         if (strlen($limit)) {
             $q .= sprintf(' LIMIT %s', $limit);
         }
 
-        if ($count && count($this->_union)) {
+        if ($this->_count && count($this->_union)) {
             $q .= ') AS u';
         } elseif (count($this->_union)) {
             $q = '(' . $q . ')';

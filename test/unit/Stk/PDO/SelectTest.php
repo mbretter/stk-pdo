@@ -27,12 +27,12 @@ class SelectTest extends Base
 
     public function testCount()
     {
-        $this->assertEquals('SELECT COUNT(*) FROM `users` a', $this->select->count());
+        $this->assertEquals('SELECT COUNT(*) FROM `users` a', $this->select->count()->toSql());
     }
 
     public function testCountDistinct()
     {
-        $this->assertEquals('SELECT COUNT(DISTINCT groupname) FROM `users` a', $this->select->distinct()->count('groupname'));
+        $this->assertEquals('SELECT COUNT(DISTINCT groupname) FROM `users` a', $this->select->distinct()->count('groupname')->toSql());
     }
 
     public function testAddColumn()
