@@ -273,7 +273,7 @@ class Connector implements Injectable
      */
     public function execute($sql, $params = [])
     {
-        $this->debug(__METHOD__ . ':' . $sql);
+        $this->debug(__METHOD__ . ':' . $sql . ' params:' . implode(',', $params));
 
         return $this->prepareExecute($sql, $params);
     }
@@ -372,6 +372,14 @@ class Connector implements Injectable
         return $this->_pdo->lastInsertId($sequence);
     }
 
+    /**
+     * fetch one column from the first returned row, useful when counting
+     *
+     * @param SqlInterface $select
+     * @param int $col
+     *
+     * @return bool|mixed
+     */
     public function fetchColumn(SqlInterface $select, $col = 0)
     {
         $sql = $select->toSQL();
@@ -396,7 +404,7 @@ class Connector implements Injectable
      *
      * @return array
      */
-    protected function derivePrivateKey($keyFields = [])
+    public function derivePrivateKey($keyFields = [])
     {
         if (count($keyFields)) {
             return $keyFields;

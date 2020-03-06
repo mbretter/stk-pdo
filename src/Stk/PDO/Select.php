@@ -25,7 +25,13 @@ class Select implements SqlInterface
      */
     protected $quoteFunc;
 
-    public function __construct(Closure $quote = null, $table = null)
+    /**
+     * Select constructor.
+     *
+     * @param Closure $quote
+     * @param null $table
+     */
+    public function __construct(Closure $quote, $table = null)
     {
         if ($table !== null) {
             $this->_from[] = [['a' => $table], ['*']];
