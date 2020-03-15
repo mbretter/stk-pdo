@@ -1,7 +1,7 @@
 {
   "name": "mbretter/stk-pdo",
   "type": "library",
-  "description": "MongoDB database access using immutables",
+  "description": "PDO database access using immutables",
   "keywords": [
     "stk",
     "pdo",
@@ -22,16 +22,14 @@
   },
   "autoload-dev": {
     "psr-4": {
-      "StkTest\\": "test/unit/Stk",
-      "StkSystemTest\\": "test/system/Stk"
+      "StkTest\\": "test/unit/Stk"
     }
   },
   "scripts": {
     "test-unit": "phpunit -v --testsuite=\"unit tests\" --testdox --bootstrap test/unit/bootstrap.php",
     "test-reports": "phpunit --testsuite=\"unit tests\" --bootstrap test/unit/bootstrap.php --coverage-html reports/coverage --coverage-clover reports/clover.xml --coverage-crap4j reports/crap4j.xml --log-junit reports/junit.xml",
     "cs-check": "php-cs-fixer fix -v --dry-run --using-cache=no src",
-    "cs-fix": "php-cs-fixer fix -v --using-cache=no src",
-    "check-migration-71": "php-cs-fixer fix -v --dry-run --using-cache=no src --rules=@PHP71Migration --allow-risky=yes"
+    "cs-fix": "php-cs-fixer fix -v --using-cache=no src"
   },
   "autoload": {
     "psr-4": {
