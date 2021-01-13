@@ -266,7 +266,7 @@ class Select implements SqlInterface
             }
 
             if (strlen($join)) $join .= ' ';
-            $join .= sprintf(' %s %s ON %s', $type, $table, $on);
+            $join .= sprintf('%s %s ON %s', $type, $table, $on);
         }
 
         $where = '';
@@ -316,7 +316,7 @@ class Select implements SqlInterface
         }
 
         if (strlen($join)) {
-            $q .= $join;
+            $q .= " $join";
         }
         if (strlen($where)) {
             $q .= sprintf(' WHERE %s', $where);

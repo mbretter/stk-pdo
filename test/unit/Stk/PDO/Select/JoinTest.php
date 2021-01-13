@@ -27,6 +27,17 @@ class JoinTest extends Base
         $this->assertEquals('SELECT a.*,g.* FROM `users` a LEFT JOIN `groups` g ON g.id = u.group_id', $sql);
     }
 
+    public function testLeftMultiple()
+    {
+        $sql = $this->select->join(['iptc' => 'iptc'], ['iptc.pic_id = a.pic_id'], ['a', 'b'])
+            ->joinLeft(['pr' => 'pic_relation'], ['pr.pic_id = a.pic_id'], [])
+            ->joinLeft(['c' => 'category'], ['c.id = pr.category_id'], ['name as agency'])
+            ->joinLeft(['ag' => 'agency'], ['ag.id = pr.agency_id'], ['name as agency'])
+            ->joinLeft(['ph' => 'photographer'], ['ph.id = pr.photographer_id'], ['firstname', 'lastname'])
+            ->order('pic_id', true)->toSql();
+        $this->assertEquals('SELECT a.*,iptc.`a`,iptc.`b`,c.`name` AS `agency`,ag.`name` AS `agency`,ph.`firstname`,ph.`lastname` FROM `users` a JOIN `iptc` iptc ON iptc.pic_id = a.pic_id LEFT JOIN `pic_relation` pr ON pr.pic_id = a.pic_id LEFT JOIN `category` c ON c.id = pr.category_id LEFT JOIN `agency` ag ON ag.id = pr.agency_id LEFT JOIN `photographer` ph ON ph.id = pr.photographer_id ORDER BY `pic_id` DESC', $sql);
+    }
+
     public function testRight()
     {
         $sql = $this->select->joinRight(['g' => 'groups'], ['g.id = u.group_id'])->toSql();
