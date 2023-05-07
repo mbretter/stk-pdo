@@ -13,7 +13,7 @@ class Select implements SqlInterface
     protected $_limit;
     protected $_join = [];
     protected $_group = [];
-    protected $_having = []; // XXX ToDo
+    protected $_having = [];
     protected $_distinct = false;
     protected $_count = false;
     protected $_union = [];
@@ -130,6 +130,36 @@ class Select implements SqlInterface
         array_shift($args);
 
         return $this->_where('OR', $c, $args);
+    }
+
+    protected function _having($l, $w, $v = [])
+    {
+        $me = clone($this);
+        if ($w === null) {
+            $me->_having = [];
+
+            return $me;
+        }
+
+        $me->_having[] = [$l, $this->_expandParams($w, $v)];
+
+        return $me;
+    }
+
+    public function having($c = null)
+    {
+        $args = func_get_args();
+        array_shift($args);
+
+        return $this->_having('AND', $c, $args);
+    }
+
+    public function orHaving($c)
+    {
+        $args = func_get_args();
+        array_shift($args);
+
+        return $this->_having('OR', $c, $args);
     }
 
     public function order($o = null, $desc = false)
@@ -291,6 +321,15 @@ class Select implements SqlInterface
             $group .= $this->qf($g);
         }
 
+        $having = '';
+        foreach ($this->_having as $h) {
+            if (strlen($having)) {
+                $having .= sprintf(' %s %s', $h[0], $h[1]);
+            } else {
+                $having .= sprintf('%s', $h[1]);
+            }
+        }
+
         $limit = '';
         if ($this->_limit !== null) {
             if (count($this->_limit) > 1) {
@@ -324,6 +363,9 @@ class Select implements SqlInterface
 
         if (strlen($group)) {
             $q .= sprintf(' GROUP BY %s', $group);
+        }
+        if (strlen($having)) {
+            $q .= sprintf(' HAVING %s', $having);
         }
         if (strlen($order) && !$this->_count) {
             $q .= sprintf(' ORDER BY %s', $order);
