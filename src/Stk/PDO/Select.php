@@ -345,6 +345,10 @@ class Select implements SqlInterface
             } else {
                 $cfields = 'COUNT(*)';
             }
+            $columns = $this->_expandFields($this->_columns);
+            if (strlen($columns)) {
+                $cfields .= ", $columns";
+            }
             if (count($this->_union)) {
                 $q = sprintf('SELECT %s FROM (SELECT %s FROM %s', $cfields, $fields, $from);
             } else {
@@ -445,7 +449,7 @@ class Select implements SqlInterface
         return $expanded;
     }
 
-    protected function _expandFields($fieldDef, $tableAlias)
+    protected function _expandFields($fieldDef, $tableAlias = null)
     {
         $fields = '';
         foreach ($fieldDef as $x) {
